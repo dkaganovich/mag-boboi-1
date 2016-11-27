@@ -47,6 +47,8 @@ int main()
     	}
     }
 
+    free(buf);
+
 	if (munmap(msg, (MSG_LEN + 1) * sizeof(char)) == -1) {
         perror("munmap failure");
         return 1;
