@@ -13,11 +13,17 @@ int main()
 {
 	const size_t MSG_LEN = 80;
 
-	sem_t *sem = sem_open("/sem", O_CREAT, S_IRUSR | S_IWUSR, 1);
-	if (sem == SEM_FAILED) {
+	sem_t *sem_accept = sem_open("/sem_accept", O_CREAT, S_IRUSR | S_IWUSR, 1);
+	if (sem_accept == SEM_FAILED) {
 		perror("sem_open failure");
 		return 1;
 	}
+
+    sem_t *sem_ready = sem_open("/sem_ready", O_CREAT, S_IRUSR | S_IWUSR, 0);
+    if (sem_ready == SEM_FAILED) {
+        perror("sem_open failure");
+        return 1;
+    }
 
 	int fd = shm_open("/share", O_CREAT | O_RDWR, S_IRUSR | S_IWUSR);
     if (fd == -1) {
@@ -34,17 +40,19 @@ int main()
     fprintf(stderr, "%s\n", "Client is running");
     
     char* buf = (char*)malloc((MSG_LEN + 1) * sizeof(char));
-    while (fgets(buf, MSG_LEN + 1, stdin) != NULL) {// buffered?!
+    while (fgets(buf, MSG_LEN + 1, stdin) != NULL) {
     	buf[strcspn(buf, "\n")] = 0;
-    	if (strlen(buf) > 0) {
-    		if (sem_wait(sem) == -1) {
-				perror("sem_wait error");
-				return 1;
-			}
-			printf("> %s\n", buf);
-			strcpy(msg, buf);
-			fsync(fd);
-    	}
+        if (sem_wait(sem_accept) == -1) {
+            perror("sem_wait error");
+            return 1;
+        }
+        printf("> %s\n", buf);
+        strcpy(msg, buf);
+        fsync(fd);
+        if (sem_post(sem_ready) == -1) {
+            perror("sem_post failure");
+            return 1;
+        }
     }
 
     free(buf);
@@ -54,10 +62,15 @@ int main()
         return 1;
     }
 
-    if (sem_close(sem) == -1) {
+    if (sem_close(sem_accept) == -1) {
 		perror("sem_close failure");
 		return 1;
 	}
+
+    if (sem_close(sem_ready) == -1) {
+        perror("sem_close failure");
+        return 1;
+    }
 
     return 0;
 }

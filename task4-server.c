@@ -25,11 +25,17 @@ int main()
 
 	const size_t MSG_LEN = 80;
 
-	sem_t *sem = sem_open("/sem", O_CREAT, S_IRUSR | S_IWUSR, 1);
-	if (sem == SEM_FAILED) {
+	sem_t *sem_accept = sem_open("/sem_accept", O_CREAT, S_IRUSR | S_IWUSR, 1);
+	if (sem_accept == SEM_FAILED) {
 		perror("sem_open failure");
 		return 1;
 	}
+
+    sem_t *sem_ready = sem_open("/sem_ready", O_CREAT, S_IRUSR | S_IWUSR, 0);
+    if (sem_ready == SEM_FAILED) {
+        perror("sem_open failure");
+        return 1;
+    }
 
 	int fd = shm_open("/share", O_CREAT | O_RDWR, S_IRUSR | S_IWUSR);
     if (fd == -1) {
@@ -49,17 +55,19 @@ int main()
 
     fprintf(stderr, "%s\n", "Server is up");
     
-    int sval;
+    int sem_val;
     while (!stopping) {
-    	if (sem_getvalue(sem, &sval) == -1) {
+    	if (sem_getvalue(sem_accept, &sem_val) == -1) {
 			perror("sem_getvalue error");
 			return 1;
 		}
-		if (sval <= 0 && strlen(msg) > 0) {
+		if (sem_val == 0) {
+            if (sem_wait(sem_ready) == -1) {
+                perror("sem_wait error");
+                return 1;
+            }
 			printf("> %s\n", msg);
-			msg[0] = 0;
-			fsync(fd);
-			if (sem_post(sem) == -1) {
+			if (sem_post(sem_accept) == -1) {
 				perror("sem_post failure");
 				return 1;
 			}
@@ -79,13 +87,22 @@ int main()
         return 1;
     }
 
-    if (sem_close(sem) == -1) {
-		perror("sem_close failure");
-		return 1;
-	}
-    if (sem_unlink("/sem") == -1) {
-    	perror("sem_unlink failure");
-    	return 1;
+    if (sem_close(sem_accept) == -1) {
+        perror("sem_close failure");
+        return 1;
+    }
+    if (sem_unlink("/sem_accept") == -1) {
+        perror("sem_unlink failure");
+        return 1;
+    }
+
+    if (sem_close(sem_ready) == -1) {
+        perror("sem_close failure");
+        return 1;
+    }
+    if (sem_unlink("/sem_ready") == -1) {
+        perror("sem_unlink failure");
+        return 1;
     }
 
     return 0;
